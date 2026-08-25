@@ -1,0 +1,30 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: limited-drop-product
+  datasource:
+    url: jdbc:mysql://localhost:3308/drop_product_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: product-producer
+
+app:
+  ops-key: limiteddrop-ops-2026
+  moderation:
+    sensitive-words: "fuck,傻逼,他妈,贱人"
+    min-length: 20
+
+logging:
+  level:
+    com.limiteddrop: INFO

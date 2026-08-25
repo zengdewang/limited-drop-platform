@@ -1,0 +1,35 @@
+# Build
+target/
+*.class
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+!**/src/**/main/resources/**/*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local config / secrets (never commit)
+application-local.yml
+.env
+*.local
+
+# Generated test data
+jmeter/tokens.csv
+jmeter/results/
+
+# WSL2 user config (documented in infra/, not committed)
+.wslconfig

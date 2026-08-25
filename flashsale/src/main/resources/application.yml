@@ -1,0 +1,36 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: limited-drop-flashsale
+  datasource:
+    url: jdbc:mysql://localhost:3308/drop_flashsale_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: flashsale-producer
+
+app:
+  flashsale:
+    # 支付窗口（分钟）：超时未支付则释放库存。注意与 order 服务的延迟级别映射保持一致
+    pay-window-minutes: 15
+    # Redis 库存/名额键的额外存活缓冲，确保延迟释放消息到达时键还在
+    release-buffer-minutes: 10
+  ops-key: limiteddrop-ops-2026
+
+logging:
+  level:
+    com.limiteddrop: INFO

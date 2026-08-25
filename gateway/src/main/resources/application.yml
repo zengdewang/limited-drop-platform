@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: limited-drop-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: user
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/user/**
+        - id: product
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/product/**
+        - id: flashsale
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/flashsale/**
+        - id: order
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/order/**
+        - id: qa
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/qa/**
+
+app:
+  jwt:
+    # 与 user 服务一致
+    secret: limited-drop-platform-dev-secret-0123456789abcdef0123456789abcdef
+    ttl-millis: 86400000
+  sentinel:
+    # demo 限流阈值；全量压测时调高
+    per-ip-qps: 5
+    per-account-qps: 10
+
+logging:
+  level:
+    com.limiteddrop: INFO

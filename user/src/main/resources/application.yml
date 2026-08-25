@@ -1,0 +1,25 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: limited-drop-user
+  datasource:
+    url: jdbc:mysql://localhost:3308/drop_user_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  jwt:
+    # 开发期共享密钥；生产应放到环境变量/配置中心
+    secret: limited-drop-platform-dev-secret-0123456789abcdef0123456789abcdef
+    ttl-millis: 86400000
+
+logging:
+  level:
+    com.limiteddrop: INFO

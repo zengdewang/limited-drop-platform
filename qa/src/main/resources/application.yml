@@ -1,0 +1,53 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: limited-drop-qa
+  sql:
+    init:
+      mode: always
+  datasource:
+    url: jdbc:mysql://localhost:3308/drop_qa_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: qa-producer
+
+app:
+  ops-key: limiteddrop-ops-2026
+  milvus:
+    uri: http://localhost:19530
+    collection: drop_kb
+    dimension: 1024
+  rag:
+    # SiliconFlow（bge-m3 embedding + bge-reranker）—— 放环境变量或 application-local.yml
+    siliconflow:
+      base-url: https://api.siliconflow.cn/v1
+      api-key: ${SILICONFLOW_API_KEY:}
+      embed-model: BAAI/bge-m3
+      rerank-model: BAAI/bge-reranker-v2-m3
+    # DeepSeek chat
+    deepseek:
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:}
+      chat-model: deepseek-chat
+    chunk-size: 300
+    chunk-overlap: 30
+  # 只读数据源：qa 全量重建时读 product/review 表
+  product-db:
+    url: jdbc:mysql://localhost:3308/drop_product_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    username: root
+    password: root123
+
+logging:
+  level:
+    com.limiteddrop: INFO

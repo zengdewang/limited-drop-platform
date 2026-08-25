@@ -1,0 +1,37 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: limited-drop-order
+  datasource:
+    url: jdbc:mysql://localhost:3308/drop_order_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: order-producer
+
+app:
+  order:
+    # 支付窗口（分钟）——必须与 flashsale 的 app.flashsale.pay-window-minutes 一致
+    pay-window-minutes: 15
+    # 延迟消息级别：15m → 15（broker.conf 的 messageDelayLevel 第 15 级）
+    # 开发快测：设 pay-window-minutes=1 且 payment-delay-level=5（1m）
+    payment-delay-level: 15
+    # 订单未落库时，超时检查的重试延迟级别（30s → level 4）
+    check-retry-delay-level: 4
+    # 模拟支付延迟（毫秒），0 = 立即成功
+    mock-pay-delay-ms: 0
+  ops-key: limiteddrop-ops-2026
+
+logging:
+  level:
+    com.limiteddrop: INFO

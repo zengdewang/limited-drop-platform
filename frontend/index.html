@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#18312b">
+  <title>Maison de Port / 限量发售</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="announcement"><span>限量发售 01</span><strong>下一场发售：Birkin 25 / 12:00 CST</strong><button class="text-button" data-action="open-account">我的账户 <i data-lucide="arrow-up-right"></i></button></div>
+
+  <header class="site-header shell">
+    <a class="wordmark" href="#top" aria-label="Maison de Port 首页"><span>MP</span><strong>Maison<br>de Port</strong></a>
+    <nav class="main-nav" aria-label="主导航">
+      <a class="nav-link is-active" href="#drops">发售</a>
+      <a class="nav-link" href="#catalog">精选</a>
+      <a class="nav-link" href="#assistant">知识库</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-button" data-action="toggle-search" aria-label="搜索" title="搜索"><i data-lucide="search"></i></button>
+      <button class="account-button" data-action="open-account"><i data-lucide="user-round"></i><span data-account-label>登录</span></button>
+      <button class="menu-button icon-button" data-action="toggle-menu" aria-label="打开菜单"><i data-lucide="menu"></i></button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero shell" id="drops">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-dot"></span>精选发售 / 01</p>
+        <h1>值得被珍藏的<br><em>作品。</em></h1>
+        <p class="hero-intro">精选难以寻觅的珍品，以少量限量的方式，在恰好的时刻与您相遇。</p>
+        <div class="hero-links"><a class="primary-button" href="#live-drop">查看当前发售 <i data-lucide="arrow-down-right"></i></a><a class="quiet-link" href="#assistant">咨询知识库 <i data-lucide="arrow-up-right"></i></a></div>
+        <dl class="hero-metrics"><div><dt>04</dt><dd>本次精选藏品</dd></div><div><dt>01</dt><dd>当前限量发售</dd></div><div><dt>100%</dt><dd>已完成真伪鉴定</dd></div></dl>
+      </div>
+      <div class="hero-visual">
+        <div class="visual-index">MP / 001</div>
+        <img src="https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=1200&q=85" alt="棕色结构感皮革手袋">
+        <div class="visual-caption"><span>Maison de Port</span><strong>值得长久珍藏。</strong></div>
+        <span class="visual-stamp">真实<br>藏品</span>
+      </div>
+    </section>
+
+    <section class="live-band shell" id="live-drop">
+      <div class="band-heading"><p class="eyebrow">当前发售</p><span class="live-indicator"><i></i>正在接受申请</span></div>
+      <div class="live-content">
+        <div class="live-product"><div class="live-thumb"><img src="https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=500&q=85" alt="黑色皮革手袋"></div><div><p class="product-kicker">精选系列 / 001</p><h2 data-live-name>Birkin 25 · Togo 皮革</h2><p data-live-category>Hermès / 手袋</p></div></div>
+        <div class="countdown-block"><span>申请截止倒计时</span><strong data-countdown>00 : 18 : 42</strong><div class="countdown-track"><span data-countdown-progress></span></div></div>
+        <div class="inventory-block"><span>剩余数量</span><strong data-remaining>24</strong><small>共 40 件</small></div>
+        <div class="live-price"><span data-live-price>¥ 86,000</span><button class="primary-button compact" data-action="buy"><i data-lucide="zap"></i>申请购买</button></div>
+      </div>
+      <p class="demo-note" data-demo-note hidden>演示模式 · 连接平台服务后可查看实时库存。</p>
+    </section>
+
+    <section class="catalog-section shell" id="catalog">
+      <div class="section-header"><div><p class="eyebrow">精选</p><h2>四件作品，<br><em>同一套标准。</em></h2></div><div class="section-tools"><span data-product-count>04 件</span><button class="filter-button" data-action="toggle-filter">筛选 <i data-lucide="sliders-horizontal"></i></button></div></div>
+      <div class="catalog-grid" data-product-grid></div>
+    </section>
+
+    <section class="assistant-section shell" id="assistant">
+      <div class="assistant-aside"><p class="eyebrow">知识库</p><h2>决定之前，<br><em>先问一问。</em></h2><p>答案来自官方产品资料与已验证的购买评价。</p><span class="assistant-status"><i></i>知识库已上线</span></div>
+      <div class="assistant-panel">
+        <div class="assistant-topline"><span>问答助手</span><span class="mono">RAG / 02</span></div>
+        <div class="conversation" data-conversation><div class="assistant-message"><span class="message-mark">MP</span><p>关于本次发售的作品，您想了解什么？</p></div></div>
+        <form class="question-form" data-question-form><label for="question">您的问题</label><div class="question-input"><input id="question" name="question" maxlength="500" autocomplete="off" placeholder="例如：Togo 皮革使用一段时间后手感如何？" required><button class="icon-button dark" type="submit" aria-label="提问" title="提问"><i data-lucide="arrow-up"></i></button></div><div class="suggestions"><button type="button" data-question="Birkin 25 的尺寸标准吗？">尺寸</button><button type="button" data-question="皮革应该如何护理？">护理</button><button type="button" data-question="已验证买家怎么评价？">评价</button></div></form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer shell"><div class="footer-mark">MP</div><div><p class="eyebrow">Maison de Port</p><p>限量作品，恰逢其时。</p></div><div class="footer-links"><a href="#drops">发售</a><a href="#catalog">精选</a><a href="#assistant">知识库</a></div><span class="mono">© 2026 MP</span></footer>
+
+  <div class="modal-backdrop" data-modal hidden><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close icon-button" data-action="close-modal" aria-label="关闭"><i data-lucide="x"></i></button><p class="eyebrow">我的账户</p><h2 id="modal-title">保留您的<br><em>申请资格。</em></h2><div class="auth-tabs"><button class="is-active" data-auth-tab="login">登录</button><button data-auth-tab="register">创建账户</button></div><form data-auth-form><label>用户名<input name="username" required autocomplete="username" placeholder="请输入用户名"></label><label data-password-label>密码<input name="password" type="password" required autocomplete="current-password" placeholder="请输入密码"></label><button class="primary-button full" type="submit" data-auth-submit>登录 <i data-lucide="arrow-up-right"></i></button><p class="form-feedback" data-form-feedback></p></form></section></div>
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</body>
+</html>

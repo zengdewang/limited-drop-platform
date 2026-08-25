@@ -1,0 +1,156 @@
+name: limited-drop-infra
+
+# 中间件栈 —— 跑在 WSL2（Docker Desktop）。6 个 Spring Boot 服务跑 Windows 本机 JVM。
+# 内存上限针对 16GB 机器调优（配合 infra/.wslconfig）。
+# 启动:  docker compose up -d
+# 健康:  docker compose ps   （全部 healthy 后再启动服务）
+
+services:
+  mysql:
+    image: docker.m.daocloud.io/library/mysql:8.0
+    container_name: drop-mysql
+    ports:
+      - "3308:3306"   # 宿主 3306 被 Windows 本机 MySQL 占用，用 3308 避免冲突
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./infra/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - mysql-data:/var/lib/mysql
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: drop-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    mem_limit: 300m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.0
+    container_name: drop-rmq-namesrv
+    user: root
+    ports:
+      - "9876:9876"
+    environment:
+      # 官方镜像默认 -Xms4g，必须压小
+      JAVA_OPT_EXT: "-Xms128m -Xmx256m -Xmn64m -XX:MaxDirectMemorySize=128m"
+    volumes:
+      - rmq-namesrv-logs:/home/rocketmq/logs
+    command: sh mqnamesrv
+    mem_limit: 300m
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9876'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.0
+    container_name: drop-rmq-broker
+    user: root
+    ports:
+      - "10911:10911"   # remoting / producer-consumer
+      - "10909:10909"   # vip channel
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+      # 官方镜像默认 -Xms8g，必须压小，否则被容器内存上限 OOM 杀
+      JAVA_OPT_EXT: "-Xms256m -Xmx512m -Xmn128m -XX:MaxDirectMemorySize=256m"
+    volumes:
+      - ./infra/rocketmq/broker.conf:/home/rocketmq/broker.conf:ro
+      - rmq-broker-store:/home/rocketmq/store
+      - rmq-broker-logs:/home/rocketmq/logs
+    command: sh mqbroker -n rocketmq-namesrv:9876 -c /home/rocketmq/broker.conf
+    mem_limit: 1g
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/10911'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.14
+    container_name: drop-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd-data:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    mem_limit: 500m
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: drop-minio
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    mem_limit: 500m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  milvus:
+    image: docker.m.daocloud.io/milvusdb/milvus:v2.5.7
+    container_name: drop-milvus
+    ports:
+      - "19530:19530"  # gRPC (Java SDK)
+      - "9091:9091"    # healthz / metrics
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    command: ["milvus", "run", "standalone"]
+    mem_limit: 3g
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+volumes:
+  mysql-data:
+  redis-data:
+  rmq-namesrv-logs:
+  rmq-broker-store:
+  rmq-broker-logs:
+  etcd-data:
+  minio-data:
