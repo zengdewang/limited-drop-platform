@@ -1,0 +1,730 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Flash Sale 并发与限流测试">
+      <stringProp name="TestPlan.comments">JMeter 5.6.3；scenario=inventory|same-user|ramp|limit-ip|limit-account</stringProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="场景变量">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="scenario" elementType="Argument">
+            <stringProp name="Argument.name">scenario</stringProp>
+            <stringProp name="Argument.value">${__P(scenario,inventory)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="drop_id" elementType="Argument">
+            <stringProp name="Argument.name">drop_id</stringProp>
+            <stringProp name="Argument.value">${__P(drop_id,1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="00 - 初始化与参数校验">
+        <intProp name="ThreadGroup.num_threads">1</intProp>
+        <intProp name="ThreadGroup.ramp_time">0</intProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="执行一次">
+          <stringProp name="LoopController.loops">1</stringProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </SetupThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="初始化计数器并校验参数" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script">
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
+
+def scenarios = [&apos;inventory&apos;, &apos;same-user&apos;, &apos;ramp&apos;, &apos;limit-ip&apos;, &apos;limit-account&apos;]
+def scenario = props.getProperty(&apos;scenario&apos;, &apos;inventory&apos;)
+def threads = props.getProperty(&apos;threads&apos;, &apos;1&apos;) as int
+def loops = props.getProperty(&apos;loops&apos;, &apos;1&apos;) as int
+def stock = props.getProperty(&apos;stock&apos;, &apos;0&apos;) as int
+def errors = []
+
+props.remove(&apos;flashsale.configError&apos;)
+if (!scenarios.contains(scenario)) errors &lt;&lt; &quot;未知 scenario=${scenario}&quot;
+if (threads &lt; 1) errors &lt;&lt; &apos;threads 必须大于 0&apos;
+if (loops &lt; 1) errors &lt;&lt; &apos;loops 必须大于 0&apos;
+if ([&apos;inventory&apos;, &apos;ramp&apos;].contains(scenario) &amp;&amp; stock &lt; 1) errors &lt;&lt; &apos;inventory/ramp 的 stock 必须大于 0&apos;
+
+def usersPath = props.getProperty(&apos;users_file&apos;, &apos;loadtest/users.csv.example&apos;)
+def usersFile = new File(usersPath)
+if (!usersFile.isAbsolute()) usersFile = new File(System.getProperty(&apos;user.dir&apos;), usersPath)
+if (!usersFile.isFile()) {
+    errors &lt;&lt; &quot;CSV 文件不存在：${usersFile.absolutePath}&quot;
+} else if ([&apos;inventory&apos;, &apos;ramp&apos;, &apos;limit-ip&apos;].contains(scenario)) {
+    def rows = usersFile.readLines(&apos;UTF-8&apos;).findAll { !it.trim().isEmpty() }
+    def dataRows = Math.max(0, rows.size() - 1)
+    def requiredRows = threads * loops
+    if (dataRows &lt; requiredRows) errors &lt;&lt; &quot;CSV 用户不足：需要 ${requiredRows} 行，实际 ${dataRows} 行&quot;
+    if (scenario == &apos;limit-ip&apos;) {
+        def selected = rows.drop(1).take(requiredRows).join(&apos;\n&apos;)
+        if (selected =~ /(?i)(REPLACE_WITH_JWT|&lt;JWT&gt;|PLACEHOLDER)/) {
+            errors &lt;&lt; &apos;limit-ip 需要真实 JWT，请先运行 prepare-users.ps1&apos;
+        }
+    }
+}
+if (scenario == &apos;limit-account&apos;) {
+    def token = props.getProperty(&apos;same_user_token&apos;, &apos;&apos;)
+    if (!token || token =~ /(?i)(REPLACE_WITH_JWT|&lt;JWT&gt;|PLACEHOLDER)/) {
+        errors &lt;&lt; &apos;limit-account 需要 same_user_token&apos;
+    }
+}
+
+[&apos;samples&apos;, &apos;success&apos;, &apos;soldout&apos;, &apos;duplicate&apos;, &apos;unopened&apos;, &apos;rate_limited&apos;,
+ &apos;http_error&apos;, &apos;invalid_json&apos;, &apos;invalid_business&apos;, &apos;oversell&apos;, &apos;assertion_failures&apos;].each {
+    props.put(&quot;flashsale.counter.${it}&quot;, new AtomicLong(0))
+}
+props.put(&apos;flashsale.orderNos&apos;, ConcurrentHashMap.newKeySet())
+props.put(&apos;flashsale.latencies&apos;, new ConcurrentLinkedQueue&lt;Long&gt;())
+props.setProperty(&apos;flashsale.expectedSamples&apos;, String.valueOf(threads * loops))
+props.setProperty(&apos;flashsale.scenario&apos;, scenario)
+
+if (!errors.isEmpty()) {
+    def message = errors.join(&apos;; &apos;)
+    props.setProperty(&apos;flashsale.configError&apos;, message)
+    SampleResult.setSuccessful(false)
+    SampleResult.setResponseCode(&apos;400&apos;)
+    SampleResult.setResponseMessage(&apos;配置错误&apos;)
+    SampleResult.setResponseData(message, &apos;UTF-8&apos;)
+} else {
+    SampleResult.setSuccessful(true)
+    SampleResult.setResponseCode(&apos;200&apos;)
+    SampleResult.setResponseMessage(&apos;初始化成功&apos;)
+    SampleResult.setResponseData(&quot;scenario=${scenario}, threads=${threads}, loops=${loops}, stock=${stock}&quot;, &apos;UTF-8&apos;)
+}
+          </stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="10 - 场景执行" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">${__P(threads,50)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(ramp_seconds,1)}</stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="请求循环">
+          <stringProp name="LoopController.loops">${__P(loops,1)}</stringProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="CSV 用户参数化">
+          <stringProp name="delimiter">,</stringProp>
+          <stringProp name="fileEncoding">UTF-8</stringProp>
+          <stringProp name="filename">${__P(users_file,loadtest/users.csv.example)}</stringProp>
+          <boolProp name="ignoreFirstLine">true</boolProp>
+          <boolProp name="quotedData">true</boolProp>
+          <boolProp name="recycle">true</boolProp>
+          <stringProp name="shareMode">shareMode.all</stringProp>
+          <boolProp name="stopThread">false</boolProp>
+          <stringProp name="variableNames">userId,token,username,clientIp</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="直连场景：inventory / same-user / ramp">
+          <stringProp name="IfController.condition">${__groovy(props.get(&apos;flashsale.configError&apos;) == null ? !vars.get(&apos;scenario&apos;).startsWith(&apos;limit-&apos;) : false)}</stringProp>
+          <boolProp name="IfController.evaluateAll">false</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST 抢购（直连 Flashsale）" enabled="true">
+            <stringProp name="HTTPSampler.connect_timeout">${__P(connect_timeout_ms,5000)}</stringProp>
+            <stringProp name="HTTPSampler.response_timeout">${__P(response_timeout_ms,10000)}</stringProp>
+            <stringProp name="HTTPSampler.domain">${__P(direct_host,localhost)}</stringProp>
+            <stringProp name="HTTPSampler.port">${__P(direct_port,8083)}</stringProp>
+            <stringProp name="HTTPSampler.protocol">http</stringProp>
+            <stringProp name="HTTPSampler.path">/api/flashsale/drops/${drop_id}/buy</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="用户定义的变量">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="选择直连用户" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+def scenario = vars.get(&apos;scenario&apos;)
+def customerId = scenario == &apos;same-user&apos;
+        ? props.getProperty(&apos;same_user_id&apos;, &apos;10001&apos;)
+        : vars.get(&apos;userId&apos;)
+vars.put(&apos;effective_user_id&apos;, customerId ?: &apos;&apos;)
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PreProcessor>
+            <hashTree/>
+            <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="直连请求头" enabled="true">
+              <collectionProp name="HeaderManager.headers">
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">X-User-Id</stringProp>
+                  <stringProp name="Header.value">${effective_user_id}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Accept</stringProp>
+                  <stringProp name="Header.value">application/json</stringProp>
+                </elementProp>
+              </collectionProp>
+            </HeaderManager>
+            <hashTree/>
+            <SyncTimer guiclass="TestBeanGUI" testclass="SyncTimer" testname="同步并发起跑" enabled="true">
+              <stringProp name="groupSize">${__P(sync_group_size,0)}</stringProp>
+              <stringProp name="timeoutInMs">${__P(sync_timeout_ms,30000)}</stringProp>
+            </SyncTimer>
+            <hashTree/>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="线程安全结果统计" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import groovy.json.JsonSlurper
+import java.util.concurrent.atomic.AtomicLong
+
+def increment = { name -&gt; ((AtomicLong) props.get(&quot;flashsale.counter.${name}&quot;)).incrementAndGet() }
+increment(&apos;samples&apos;)
+props.get(&apos;flashsale.latencies&apos;).add(prev.getTime() as Long)
+def http = prev.getResponseCode()
+def scenario = props.getProperty(&apos;scenario&apos;, &apos;inventory&apos;)
+def allowedHttp = scenario.startsWith(&apos;limit-&apos;) ? [&apos;200&apos;, &apos;429&apos;] : [&apos;200&apos;]
+if (!allowedHttp.contains(http)) increment(&apos;http_error&apos;)
+
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (http == &apos;429&apos; || (body.code instanceof Number &amp;&amp; body.code.intValue() == 429)) {
+        increment(&apos;rate_limited&apos;)
+    } else if (http == &apos;200&apos; &amp;&amp; body.code instanceof Number &amp;&amp; body.code.intValue() == 0 &amp;&amp; body.data instanceof Map) {
+        def businessCode = body.data.code
+        if (!(businessCode instanceof Number)) {
+            increment(&apos;invalid_business&apos;)
+        } else {
+            switch (businessCode.intValue()) {
+                case 0:
+                    increment(&apos;success&apos;)
+                    if (!(body.data.remaining instanceof Number) || body.data.remaining.longValue() &lt; 0) increment(&apos;oversell&apos;)
+                    if (body.data.orderNo) props.get(&apos;flashsale.orderNos&apos;).add(body.data.orderNo.toString())
+                    break
+                case -1:
+                    increment(&apos;soldout&apos;)
+                    break
+                case -2:
+                    increment(&apos;duplicate&apos;)
+                    if (body.data.orderNo) props.get(&apos;flashsale.orderNos&apos;).add(body.data.orderNo.toString())
+                    break
+                case -3:
+                    increment(&apos;unopened&apos;)
+                    break
+                default:
+                    increment(&apos;invalid_business&apos;)
+            }
+        }
+    } else {
+        increment(&apos;invalid_business&apos;)
+    }
+} catch (Exception ignored) {
+    increment(&apos;invalid_json&apos;)
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PostProcessor>
+            <hashTree/>
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="HTTP 状态断言" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import java.util.concurrent.atomic.AtomicLong
+if (prev.getResponseCode() != &apos;200&apos;) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(&quot;直连场景期望 HTTP 200，实际 ${prev.getResponseCode()}&quot;)
+    ((AtomicLong) props.get(&apos;flashsale.counter.assertion_failures&apos;)).incrementAndGet()
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223Assertion>
+            <hashTree/>
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="JSON 结构断言" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import groovy.json.JsonSlurper
+import java.util.concurrent.atomic.AtomicLong
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (!(body instanceof Map) || !body.containsKey(&apos;code&apos;) || !body.containsKey(&apos;message&apos;) || !body.containsKey(&apos;data&apos;)) {
+        throw new IllegalArgumentException(&apos;缺少 code/message/data&apos;)
+    }
+} catch (Exception e) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(&quot;响应不是合法统一 JSON：${e.message}&quot;)
+    ((AtomicLong) props.get(&apos;flashsale.counter.assertion_failures&apos;)).incrementAndGet()
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223Assertion>
+            <hashTree/>
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="业务码断言" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import groovy.json.JsonSlurper
+import java.util.concurrent.atomic.AtomicLong
+
+def fail = { message -&gt;
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(message)
+    ((AtomicLong) props.get(&apos;flashsale.counter.assertion_failures&apos;)).incrementAndGet()
+}
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (!(body.code instanceof Number) || body.code.intValue() != 0 || !(body.data instanceof Map)) {
+        fail(&apos;直连成功响应必须为顶层 code=0 且包含 data&apos;)
+        return
+    }
+    def code = body.data.code
+    if (!(code instanceof Number) || ![0, -1, -2, -3].contains(code.intValue())) {
+        fail(&quot;未知业务码：${code}&quot;)
+        return
+    }
+    if (code.intValue() == 0) {
+        if (!body.data.orderNo) fail(&apos;抢购成功必须返回 orderNo&apos;)
+        if (!(body.data.remaining instanceof Number) || body.data.remaining.longValue() &lt; 0) fail(&apos;抢购成功时 remaining 必须大于等于 0&apos;)
+    }
+    if (code.intValue() == -2 &amp;&amp; !body.data.orderNo) fail(&apos;重复购买必须返回原 orderNo&apos;)
+} catch (Exception e) {
+    fail(&quot;业务响应解析失败：${e.message}&quot;)
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223Assertion>
+            <hashTree/>
+          </hashTree>
+        </hashTree>
+        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Gateway 场景：limit-ip / limit-account">
+          <stringProp name="IfController.condition">${__groovy(props.get(&apos;flashsale.configError&apos;) == null ? vars.get(&apos;scenario&apos;).startsWith(&apos;limit-&apos;) : false)}</stringProp>
+          <boolProp name="IfController.evaluateAll">false</boolProp>
+          <boolProp name="IfController.useExpression">true</boolProp>
+        </IfController>
+        <hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST 抢购（经过 Gateway）" enabled="true">
+            <stringProp name="HTTPSampler.connect_timeout">${__P(connect_timeout_ms,5000)}</stringProp>
+            <stringProp name="HTTPSampler.response_timeout">${__P(response_timeout_ms,10000)}</stringProp>
+            <stringProp name="HTTPSampler.domain">${__P(gateway_host,localhost)}</stringProp>
+            <stringProp name="HTTPSampler.port">${__P(gateway_port,8080)}</stringProp>
+            <stringProp name="HTTPSampler.protocol">http</stringProp>
+            <stringProp name="HTTPSampler.path">/api/flashsale/drops/${drop_id}/buy</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="用户定义的变量">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="选择 Gateway 账号与 IP" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+def scenario = vars.get(&apos;scenario&apos;)
+if (scenario == &apos;limit-ip&apos;) {
+    vars.put(&apos;effective_token&apos;, vars.get(&apos;token&apos;) ?: &apos;&apos;)
+    vars.put(&apos;effective_ip&apos;, props.getProperty(&apos;limit_ip&apos;, &apos;198.51.100.10&apos;))
+} else {
+    vars.put(&apos;effective_token&apos;, props.getProperty(&apos;same_user_token&apos;, &apos;&apos;))
+    int octet = (ctx.getThreadNum() % 250) + 1
+    vars.put(&apos;effective_ip&apos;, &quot;198.51.100.${octet}&quot;)
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PreProcessor>
+            <hashTree/>
+            <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Gateway 请求头" enabled="true">
+              <collectionProp name="HeaderManager.headers">
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Authorization</stringProp>
+                  <stringProp name="Header.value">Bearer ${effective_token}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">X-Forwarded-For</stringProp>
+                  <stringProp name="Header.value">${effective_ip}</stringProp>
+                </elementProp>
+                <elementProp name="" elementType="Header">
+                  <stringProp name="Header.name">Accept</stringProp>
+                  <stringProp name="Header.value">application/json</stringProp>
+                </elementProp>
+              </collectionProp>
+            </HeaderManager>
+            <hashTree/>
+            <SyncTimer guiclass="TestBeanGUI" testclass="SyncTimer" testname="同步并发起跑" enabled="true">
+              <stringProp name="groupSize">${__P(sync_group_size,0)}</stringProp>
+              <stringProp name="timeoutInMs">${__P(sync_timeout_ms,30000)}</stringProp>
+            </SyncTimer>
+            <hashTree/>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="线程安全结果统计" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import groovy.json.JsonSlurper
+import java.util.concurrent.atomic.AtomicLong
+
+def increment = { name -&gt; ((AtomicLong) props.get(&quot;flashsale.counter.${name}&quot;)).incrementAndGet() }
+increment(&apos;samples&apos;)
+props.get(&apos;flashsale.latencies&apos;).add(prev.getTime() as Long)
+def http = prev.getResponseCode()
+def scenario = props.getProperty(&apos;scenario&apos;, &apos;inventory&apos;)
+def allowedHttp = scenario.startsWith(&apos;limit-&apos;) ? [&apos;200&apos;, &apos;429&apos;] : [&apos;200&apos;]
+if (!allowedHttp.contains(http)) increment(&apos;http_error&apos;)
+
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (http == &apos;429&apos; || (body.code instanceof Number &amp;&amp; body.code.intValue() == 429)) {
+        increment(&apos;rate_limited&apos;)
+    } else if (http == &apos;200&apos; &amp;&amp; body.code instanceof Number &amp;&amp; body.code.intValue() == 0 &amp;&amp; body.data instanceof Map) {
+        def businessCode = body.data.code
+        if (!(businessCode instanceof Number)) {
+            increment(&apos;invalid_business&apos;)
+        } else {
+            switch (businessCode.intValue()) {
+                case 0:
+                    increment(&apos;success&apos;)
+                    if (!(body.data.remaining instanceof Number) || body.data.remaining.longValue() &lt; 0) increment(&apos;oversell&apos;)
+                    if (body.data.orderNo) props.get(&apos;flashsale.orderNos&apos;).add(body.data.orderNo.toString())
+                    break
+                case -1:
+                    increment(&apos;soldout&apos;)
+                    break
+                case -2:
+                    increment(&apos;duplicate&apos;)
+                    if (body.data.orderNo) props.get(&apos;flashsale.orderNos&apos;).add(body.data.orderNo.toString())
+                    break
+                case -3:
+                    increment(&apos;unopened&apos;)
+                    break
+                default:
+                    increment(&apos;invalid_business&apos;)
+            }
+        }
+    } else {
+        increment(&apos;invalid_business&apos;)
+    }
+} catch (Exception ignored) {
+    increment(&apos;invalid_json&apos;)
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PostProcessor>
+            <hashTree/>
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="HTTP 状态断言" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import java.util.concurrent.atomic.AtomicLong
+if (![&apos;200&apos;, &apos;429&apos;].contains(prev.getResponseCode())) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(&quot;Gateway 限流场景只允许 HTTP 200/429，实际 ${prev.getResponseCode()}&quot;)
+    ((AtomicLong) props.get(&apos;flashsale.counter.assertion_failures&apos;)).incrementAndGet()
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223Assertion>
+            <hashTree/>
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="JSON 结构断言" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import groovy.json.JsonSlurper
+import java.util.concurrent.atomic.AtomicLong
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (!(body instanceof Map) || !body.containsKey(&apos;code&apos;) || !body.containsKey(&apos;message&apos;) || !body.containsKey(&apos;data&apos;)) {
+        throw new IllegalArgumentException(&apos;缺少 code/message/data&apos;)
+    }
+} catch (Exception e) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(&quot;响应不是合法统一 JSON：${e.message}&quot;)
+    ((AtomicLong) props.get(&apos;flashsale.counter.assertion_failures&apos;)).incrementAndGet()
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223Assertion>
+            <hashTree/>
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="业务码断言" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">
+import groovy.json.JsonSlurper
+import java.util.concurrent.atomic.AtomicLong
+
+def fail = { message -&gt;
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(message)
+    ((AtomicLong) props.get(&apos;flashsale.counter.assertion_failures&apos;)).incrementAndGet()
+}
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (prev.getResponseCode() == &apos;429&apos;) {
+        if (!(body.code instanceof Number) || body.code.intValue() != 429) fail(&apos;HTTP 429 时顶层 code 必须为 429&apos;)
+        return
+    }
+    if (!(body.code instanceof Number) || body.code.intValue() != 0 || !(body.data instanceof Map)) {
+        fail(&apos;Gateway 放行响应必须为顶层 code=0 且包含 data&apos;)
+        return
+    }
+    def code = body.data.code
+    if (!(code instanceof Number) || ![0, -1, -2, -3].contains(code.intValue())) {
+        fail(&quot;未知业务码：${code}&quot;)
+        return
+    }
+    if (code.intValue() == 0) {
+        if (!body.data.orderNo) fail(&apos;抢购成功必须返回 orderNo&apos;)
+        if (!(body.data.remaining instanceof Number) || body.data.remaining.longValue() &lt; 0) fail(&apos;抢购成功时 remaining 必须大于等于 0&apos;)
+    }
+    if (code.intValue() == -2 &amp;&amp; !body.data.orderNo) fail(&apos;重复购买必须返回原 orderNo&apos;)
+} catch (Exception e) {
+    fail(&quot;业务响应解析失败：${e.message}&quot;)
+}
+              </stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223Assertion>
+            <hashTree/>
+          </hashTree>
+        </hashTree>
+      </hashTree>
+      <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="90 - 汇总与最终判定" enabled="true">
+        <intProp name="ThreadGroup.num_threads">1</intProp>
+        <intProp name="ThreadGroup.ramp_time">0</intProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="执行一次">
+          <stringProp name="LoopController.loops">1</stringProp>
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+        </elementProp>
+      </PostThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="输出成功、售罄、重复、限流与超卖统计" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script">
+import groovy.json.JsonOutput
+import java.util.concurrent.atomic.AtomicLong
+
+def value = { name -&gt;
+    def counter = props.get(&quot;flashsale.counter.${name}&quot;)
+    counter instanceof AtomicLong ? counter.get() : 0L
+}
+def scenario = props.getProperty(&apos;flashsale.scenario&apos;, props.getProperty(&apos;scenario&apos;, &apos;inventory&apos;))
+def expected = props.getProperty(&apos;flashsale.expectedSamples&apos;, &apos;0&apos;) as long
+def stock = props.getProperty(&apos;stock&apos;, &apos;0&apos;) as long
+def samples = value(&apos;samples&apos;)
+def success = value(&apos;success&apos;)
+def soldout = value(&apos;soldout&apos;)
+def duplicate = value(&apos;duplicate&apos;)
+def unopened = value(&apos;unopened&apos;)
+def rateLimited = value(&apos;rate_limited&apos;)
+def httpError = value(&apos;http_error&apos;)
+def invalidJson = value(&apos;invalid_json&apos;)
+def invalidBusiness = value(&apos;invalid_business&apos;)
+def oversell = value(&apos;oversell&apos;)
+def assertionFailures = value(&apos;assertion_failures&apos;)
+def orderNos = props.get(&apos;flashsale.orderNos&apos;)
+def latencies = (props.get(&apos;flashsale.latencies&apos;) ?: []).collect { it as long }.sort()
+def averageMs = latencies.isEmpty() ? 0 : Math.round((latencies.sum() / (double) latencies.size()) * 100) / 100.0
+def p95Ms = latencies.isEmpty() ? 0 : latencies[Math.max(0, (int) Math.ceil(latencies.size() * 0.95) - 1)]
+
+def failures = []
+def configError = props.getProperty(&apos;flashsale.configError&apos;)
+if (configError) failures &lt;&lt; configError
+if (samples != expected) failures &lt;&lt; &quot;样本数不符：expected=${expected}, actual=${samples}&quot;
+if (httpError &gt; 0) failures &lt;&lt; &quot;非预期 HTTP 状态=${httpError}&quot;
+if (invalidJson &gt; 0) failures &lt;&lt; &quot;非法 JSON=${invalidJson}&quot;
+if (invalidBusiness &gt; 0) failures &lt;&lt; &quot;非法业务响应=${invalidBusiness}&quot;
+if (assertionFailures &gt; 0) failures &lt;&lt; &quot;断言失败=${assertionFailures}&quot;
+if (oversell &gt; 0) failures &lt;&lt; &quot;发现 remaining&lt;0 的超卖响应=${oversell}&quot;
+
+if (scenario == &apos;inventory&apos; || scenario == &apos;ramp&apos;) {
+    long expectedSuccess = Math.min(stock, samples)
+    if (success != expectedSuccess) failures &lt;&lt; &quot;成功数应为 min(stock,samples)=${expectedSuccess}，实际=${success}&quot;
+    if (success &gt; stock) failures &lt;&lt; &quot;成功数 ${success} 超过库存 ${stock}&quot;
+    if (success + soldout != samples) failures &lt;&lt; &apos;不同用户结果应全部为成功或售罄&apos;
+    if (duplicate &gt; 0) failures &lt;&lt; &quot;不同用户场景出现重复购买=${duplicate}&quot;
+    if (unopened &gt; 0) failures &lt;&lt; &quot;出现未开售响应=${unopened}&quot;
+}
+if (scenario == &apos;same-user&apos;) {
+    if (success != 1) failures &lt;&lt; &quot;同用户场景必须且只能成功 1 次，实际=${success}&quot;
+    if (duplicate != Math.max(0, samples - 1)) failures &lt;&lt; &quot;其余请求应全部重复，duplicate=${duplicate}&quot;
+    if (orderNos == null || orderNos.size() != 1) failures &lt;&lt; &quot;成功与重复响应必须使用同一 orderNo，唯一值数量=${orderNos?.size() ?: 0}&quot;
+    if (soldout &gt; 0 || unopened &gt; 0 || rateLimited &gt; 0) failures &lt;&lt; &apos;同用户直连场景不应出现售罄、未开售或限流&apos;
+}
+if (scenario.startsWith(&apos;limit-&apos;) &amp;&amp; rateLimited &lt; 1) {
+    failures &lt;&lt; &apos;未观察到 HTTP 429，请检查线程数与 Gateway 限流阈值&apos;
+}
+
+def summary = [
+    scenario: scenario,
+    checks: failures.isEmpty() ? &apos;PASS&apos; : &apos;FAIL&apos;,
+    expected_samples: expected,
+    samples: samples,
+    success: success,
+    soldout: soldout,
+    duplicate: duplicate,
+    unopened: unopened,
+    rate_limited: rateLimited,
+    http_error: httpError,
+    invalid_json: invalidJson,
+    invalid_business: invalidBusiness,
+    oversell: oversell,
+    assertion_failures: assertionFailures,
+    unique_order_nos: orderNos?.size() ?: 0,
+    average_ms: averageMs,
+    p95_ms: p95Ms,
+    failures: failures
+]
+def json = JsonOutput.prettyPrint(JsonOutput.toJson(summary))
+SampleResult.setResponseData(json, &apos;UTF-8&apos;)
+SampleResult.setDataType(org.apache.jmeter.samplers.SampleResult.TEXT)
+SampleResult.setResponseCode(failures.isEmpty() ? &apos;200&apos; : &apos;500&apos;)
+SampleResult.setResponseMessage(failures.isEmpty() ? &apos;PASS&apos; : &apos;FAIL&apos;)
+SampleResult.setSuccessful(failures.isEmpty())
+log.info(&apos;FLASHSALE_SUMMARY &apos; + JsonOutput.toJson(summary))
+
+def summaryPath = props.getProperty(&apos;summary_file&apos;, &apos;&apos;)
+if (summaryPath) {
+    def file = new File(summaryPath)
+    file.parentFile?.mkdirs()
+    file.setText(json, &apos;UTF-8&apos;)
+}
+          </stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+      <ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="汇总报告（GUI）">
+        <boolProp name="ResultCollector.error_logging">false</boolProp>
+        <objProp>
+          <name>saveConfig</name>
+          <value class="SampleSaveConfiguration">
+            <time>true</time>
+            <latency>true</latency>
+            <timestamp>true</timestamp>
+            <success>true</success>
+            <label>true</label>
+            <code>true</code>
+            <message>true</message>
+            <threadName>true</threadName>
+            <dataType>true</dataType>
+            <encoding>false</encoding>
+            <assertions>true</assertions>
+            <subresults>true</subresults>
+            <responseData>false</responseData>
+            <samplerData>false</samplerData>
+            <xml>false</xml>
+            <fieldNames>true</fieldNames>
+            <responseHeaders>false</responseHeaders>
+            <requestHeaders>false</requestHeaders>
+            <responseDataOnError>false</responseDataOnError>
+            <saveAssertionResultsFailureMessage>true</saveAssertionResultsFailureMessage>
+            <assertionsResultsToSave>0</assertionsResultsToSave>
+            <bytes>true</bytes>
+            <sentBytes>true</sentBytes>
+            <url>true</url>
+            <threadCounts>true</threadCounts>
+            <idleTime>true</idleTime>
+            <connectTime>true</connectTime>
+          </value>
+        </objProp>
+        <stringProp name="filename"></stringProp>
+      </ResultCollector>
+      <hashTree/>
+      <ResultCollector guiclass="StatVisualizer" testclass="ResultCollector" testname="聚合报告（GUI）">
+        <boolProp name="ResultCollector.error_logging">false</boolProp>
+        <objProp>
+          <name>saveConfig</name>
+          <value class="SampleSaveConfiguration">
+            <time>true</time>
+            <latency>true</latency>
+            <timestamp>true</timestamp>
+            <success>true</success>
+            <label>true</label>
+            <code>true</code>
+            <message>true</message>
+            <threadName>true</threadName>
+            <dataType>true</dataType>
+            <encoding>false</encoding>
+            <assertions>true</assertions>
+            <subresults>true</subresults>
+            <responseData>false</responseData>
+            <samplerData>false</samplerData>
+            <xml>false</xml>
+            <fieldNames>true</fieldNames>
+            <responseHeaders>false</responseHeaders>
+            <requestHeaders>false</requestHeaders>
+            <responseDataOnError>false</responseDataOnError>
+            <saveAssertionResultsFailureMessage>true</saveAssertionResultsFailureMessage>
+            <assertionsResultsToSave>0</assertionsResultsToSave>
+            <bytes>true</bytes>
+            <sentBytes>true</sentBytes>
+            <url>true</url>
+            <threadCounts>true</threadCounts>
+            <idleTime>true</idleTime>
+            <connectTime>true</connectTime>
+          </value>
+        </objProp>
+        <stringProp name="filename"></stringProp>
+      </ResultCollector>
+      <hashTree/>
+      <ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="查看结果树（调试时手动启用）" enabled="false">
+        <boolProp name="ResultCollector.error_logging">false</boolProp>
+        <objProp>
+          <name>saveConfig</name>
+          <value class="SampleSaveConfiguration">
+            <time>true</time>
+            <latency>true</latency>
+            <timestamp>true</timestamp>
+            <success>true</success>
+            <label>true</label>
+            <code>true</code>
+            <message>true</message>
+            <threadName>true</threadName>
+            <dataType>true</dataType>
+            <encoding>false</encoding>
+            <assertions>true</assertions>
+            <subresults>true</subresults>
+            <responseData>false</responseData>
+            <samplerData>false</samplerData>
+            <xml>false</xml>
+            <fieldNames>true</fieldNames>
+            <responseHeaders>false</responseHeaders>
+            <requestHeaders>false</requestHeaders>
+            <responseDataOnError>false</responseDataOnError>
+            <saveAssertionResultsFailureMessage>true</saveAssertionResultsFailureMessage>
+            <assertionsResultsToSave>0</assertionsResultsToSave>
+            <bytes>true</bytes>
+            <sentBytes>true</sentBytes>
+            <url>true</url>
+            <threadCounts>true</threadCounts>
+            <idleTime>true</idleTime>
+            <connectTime>true</connectTime>
+          </value>
+        </objProp>
+        <stringProp name="filename"></stringProp>
+      </ResultCollector>
+      <hashTree/>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

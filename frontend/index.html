@@ -20,6 +20,7 @@
     <nav class="main-nav" aria-label="主导航">
       <a class="nav-link is-active" href="#drops">发售</a>
       <a class="nav-link" href="#catalog">精选</a>
+      <a class="nav-link" href="#orders" data-action="open-orders">订单</a>
       <a class="nav-link" href="#assistant">知识库</a>
     </nav>
     <div class="header-actions">
@@ -55,6 +56,11 @@
         <div class="live-price"><span data-live-price>¥ 86,000</span><button class="primary-button compact" data-action="buy"><i data-lucide="zap"></i>申请购买</button></div>
       </div>
       <p class="demo-note" data-demo-note hidden>演示模式 · 连接平台服务后可查看实时库存。</p>
+    </section>
+
+    <section class="orders-section shell" id="orders">
+      <div class="section-header"><div><p class="eyebrow">我的订单</p><h2>每一笔申请，<br><em>都有迹可循。</em></h2></div><div class="section-tools"><span data-order-count>登录后查看</span><button class="filter-button" data-action="refresh-orders" aria-label="刷新订单" title="刷新订单">刷新 <i data-lucide="refresh-cw"></i></button></div></div>
+      <div class="orders-list" data-order-list><div class="empty-state">登录后查看订单记录。</div></div>
     </section>
 
     <section class="catalog-section shell" id="catalog">

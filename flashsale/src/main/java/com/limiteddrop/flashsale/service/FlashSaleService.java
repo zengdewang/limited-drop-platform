@@ -76,15 +76,27 @@ public class FlashSaleService {
         DropSession s = requireSession(dropId);
         String open = redis.opsForValue().get(FlashSaleKey.open(dropId));
         String inv = redis.opsForValue().get(FlashSaleKey.inv(dropId));
-        String status = open != null ? "OPEN" : s.getStatus();
+        LocalDateTime now = LocalDateTime.now();
+        // Redis 是抢购热路径的真实状态；数据库 OPEN 可能在 Redis 重启或 TTL 到期后变成陈旧状态。
+        boolean ready = open != null && inv != null;
+        String status = ready ? "OPEN" : fallbackStatus(s, now);
         Long remaining = null;
-        if (open != null) {
-            remaining = inv == null ? s.getStock().longValue() : Long.parseLong(inv);
+        if (ready) {
+            remaining = Long.parseLong(inv);
         }
         return InfoResponse.builder()
                 .dropId(dropId).status(status).remaining(remaining)
                 .stock(s.getStock()).startTime(s.getStartTime()).endTime(s.getEndTime())
                 .build();
+    }
+
+    private String fallbackStatus(DropSession session, LocalDateTime now) {
+        if ("ENDED".equals(session.getStatus())
+                || (session.getEndTime() != null && !now.isBefore(session.getEndTime()))) {
+            return "ENDED";
+        }
+        // 没有完整的 Redis 预热状态时不向前端宣称可购买，等待下一次 ops open。
+        return "SCHEDULED";
     }
 
     /** 抢购：单次 Lua 往返，原子扣减 + 幂等 */

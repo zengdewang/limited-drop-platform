@@ -8,25 +8,106 @@ const demoProducts = [
 const categoryLabels = {Handbag: '手袋', Shoes: '鞋履', Accessories: '配饰', Object: '作品'};
 const badgeLabels = {'Live drop': '当前发售', 'Coming soon': '即将发售', 'The edit': '精选'};
 const sourceLabels = {PRODUCT: '商品资料', REVIEW: '已验证评价', PRODUCT_REVIEW: '已验证评价', product: '商品资料', review: '已验证评价'};
-const state = {products: [], drops: [], demo: false, authMode: 'login', user: JSON.parse(localStorage.getItem('drop_user') || 'null'), countdown: 18 * 60 + 42, filterMode: 'all'};
+const state = {products: [], drops: [], orders: [], liveDrop: null, liveInfo: null, demo: false, authMode: 'login', user: JSON.parse(localStorage.getItem('drop_user') || 'null'), countdown: 18 * 60 + 42, filterMode: 'all'};
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const labelFor = (labels, value, fallback = value) => labels[value] || fallback;
+
+class ApiError extends Error {
+  constructor(message, statusCode) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+  }
+}
 
 async function api(path, options = {}) {
   const headers = {'Content-Type': 'application/json', ...(options.headers || {})};
   const token = localStorage.getItem('drop_token');
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE}${path}`, {...options, headers});
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const body = await response.json();
-  if (body.code !== 0) throw new Error(body.message || 'Request failed');
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(body?.message || `HTTP ${response.status}`, response.status);
+  if (!body || body.code !== 0) throw new ApiError(body?.message || 'Request failed', response.status);
   return body.data;
 }
 
 function money(cents) {
   if (cents == null) return '价格面议';
   return `¥ ${(Number(cents) / 100).toLocaleString('en-US')}`;
+}
+
+const orderStatusLabels = {PENDING_PAYMENT: '待支付', PAID: '已支付', EXPIRED: '已过期'};
+
+function formatDate(value) {
+  if (!value) return '时间未知';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '时间未知' : date.toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function renderOrders() {
+  const list = $('[data-order-list]');
+  const count = $('[data-order-count]');
+  if (!list || !count) return;
+  count.textContent = `${String(state.orders.length).padStart(2, '0')} 笔`;
+  if (!state.orders.length) {
+    list.innerHTML = '<div class="empty-state">暂时没有订单记录。</div>';
+    return;
+  }
+  list.innerHTML = state.orders.map(order => {
+    const status = orderStatusLabels[order.status] || order.status || '未知状态';
+    const payAction = order.status === 'PENDING_PAYMENT'
+      ? `<button class="primary-button compact order-pay" data-action="pay-order" data-order-no="${escapeHtml(order.orderNo)}"><i data-lucide="credit-card"></i>模拟支付</button>`
+      : '';
+    return `<article class="order-item"><div class="order-main"><div><p class="order-kicker">订单 ${escapeHtml(order.orderNo || '未知')}</p><h3>Drop #${escapeHtml(order.dropId ?? '-')}</h3><p class="order-subline">商品 #${escapeHtml(order.productId ?? '-')} · ${formatDate(order.createdAt)}</p></div><div class="order-meta"><strong>${money(order.amountCents)}</strong><span class="order-status order-status-${String(order.status || '').toLowerCase()}">${escapeHtml(status)}</span>${payAction}</div></div></article>`;
+  }).join('');
+  if (window.lucide) lucide.createIcons();
+}
+
+async function loadOrders({silent = false} = {}) {
+  const list = $('[data-order-list]');
+  const count = $('[data-order-count]');
+  if (!list || !count) return;
+  if (!state.user || !localStorage.getItem('drop_token')) {
+    state.orders = [];
+    count.textContent = '登录后查看';
+    list.innerHTML = '<div class="empty-state">登录后查看订单记录。</div>';
+    return;
+  }
+  if (!silent) list.innerHTML = '<div class="loading">正在加载订单……</div>';
+  try {
+    const page = await api('/api/orders/my?page=1&size=20');
+    state.orders = page.records || [];
+    renderOrders();
+  } catch (error) {
+    state.orders = [];
+    count.textContent = '加载失败';
+    list.innerHTML = `<div class="empty-state">${error?.statusCode === 401 ? '登录已过期，请重新登录。' : '订单暂时无法加载，请稍后重试。'}</div>`;
+  }
+}
+
+function openOrders() {
+  document.body.classList.remove('menu-open');
+  if (!state.user || !localStorage.getItem('drop_token')) {
+    openModal();
+    toast('请先登录，再查看订单。');
+    return;
+  }
+  document.querySelector('#orders')?.scrollIntoView({behavior: 'smooth'});
+  loadOrders();
+}
+
+async function payOrder(orderNo) {
+  if (!orderNo) return;
+  try {
+    await api(`/api/orders/${encodeURIComponent(orderNo)}/pay`, {method: 'POST'});
+    toast('订单已支付。');
+  } catch (error) {
+    toast(error?.message || '支付未完成，请稍后重试。');
+  }
+  await loadOrders({silent: true});
 }
 
 function renderProducts(products) {
@@ -96,7 +177,10 @@ function renderLiveDrop(drop, info) {
   $('[data-live-category]').textContent = `${product.brand || 'Hermès'} / ${labelFor(categoryLabels, product.category, '手袋')}`;
   $('[data-live-price]').textContent = money(drop?.priceCents || product.priceCents);
   $('[data-remaining]').textContent = info?.remaining ?? drop?.stock ?? '24';
-  if (info?.status && info.status !== 'OPEN') $('.live-indicator').innerHTML = `<i></i>${info.status === 'SCHEDULED' ? '尚未开始' : '本场发售已结束'}`;
+  if (info?.status) {
+    const label = info.status === 'OPEN' ? '正在接受申请' : info.status === 'SCHEDULED' ? '尚未开始' : '本场发售已结束';
+    $('.live-indicator').innerHTML = `<i></i>${label}`;
+  }
 }
 
 async function loadProducts() {
@@ -115,14 +199,23 @@ async function loadProducts() {
 async function loadDrops() {
   try {
     state.drops = await api('/api/product/drops');
-    const live = state.drops.find(drop => drop.status === 'OPEN') || state.drops[0];
-    if (live) {
-      let info;
-      try { info = await api(`/api/flashsale/drops/${live.id}/info`); } catch (_) { /* service may be offline */ }
-      renderLiveDrop(live, info);
-    } else renderLiveDrop(null, null);
+    const candidates = await Promise.all(state.drops.map(async drop => {
+      try {
+        return {drop, info: await api(`/api/flashsale/drops/${drop.id}/info`)};
+      } catch (_) {
+        return {drop, info: null};
+      }
+    }));
+    const live = candidates.find(candidate => candidate.info?.status === 'OPEN')
+      || candidates.find(candidate => candidate.info?.status === 'SCHEDULED')
+      || candidates[0];
+    state.liveDrop = live?.drop || null;
+    state.liveInfo = live?.info || null;
+    renderLiveDrop(state.liveDrop, state.liveInfo);
   } catch (_) {
     state.demo = true;
+    state.liveDrop = null;
+    state.liveInfo = null;
     renderLiveDrop(null, {remaining: 24, status: 'OPEN'});
     $('[data-demo-note]').hidden = false;
   }
@@ -166,22 +259,37 @@ async function submitAuth(event) {
     updateAccount();
     closeModal();
     toast(`欢迎回来，${data.username || payload.username}。`);
-  } catch (_) {
-    if (state.demo) {
+    loadOrders({silent: true});
+  } catch (error) {
+    if (state.demo && !error?.statusCode) {
       state.user = {username: payload.username, userId: 1};
       localStorage.setItem('drop_user', JSON.stringify(state.user));
       updateAccount(); closeModal(); toast('演示账户已准备好。连接用户服务后即可进行真实登录。');
-    } else feedback.textContent = '登录失败，请检查信息后重试。';
+    } else if (state.authMode === 'login' && error?.message === '用户名或密码错误') {
+      feedback.textContent = '用户名或密码错误；首次使用请切换到“创建账户”。';
+    } else {
+      feedback.textContent = error?.message || `${state.authMode === 'register' ? '注册' : '登录'}失败，请检查信息后重试。`;
+    }
   }
 }
 
 async function buy() {
   if (!state.user || !localStorage.getItem('drop_token')) { openModal(); toast('请先登录，再申请购买。'); return; }
-  const drop = state.drops.find(item => item.status === 'OPEN') || state.drops[0];
+  const drop = state.liveDrop || state.drops[0];
   if (!drop) { toast('当前没有可申请的发售。'); return; }
   try {
+    const info = await api(`/api/flashsale/drops/${drop.id}/info`);
+    state.liveInfo = info;
+    if (info.status !== 'OPEN') {
+      toast(info.status === 'ENDED' ? '本场发售已结束。' : '本场发售尚未开始。');
+      renderLiveDrop(drop, info);
+      return;
+    }
     const result = await api(`/api/flashsale/drops/${drop.id}/buy`, {method: 'POST'});
-    if (result.code === 0 || result.code === -2) toast(`申请已锁定 · ${result.orderNo}`);
+    if (result.code === 0 || result.code === -2) {
+      toast(`申请已锁定 · ${result.orderNo}`);
+      setTimeout(() => loadOrders({silent: true}), 900);
+    }
     else if (result.code === -1) toast('本场发售已售罄。');
     else if (result.code === -3) toast('本场发售尚未开始。');
   } catch (_) { toast(state.demo ? '演示申请已记录。连接平台服务后即可锁定库存。' : '申请未能完成，请稍后重试。'); }
@@ -211,6 +319,9 @@ function bindEvents() {
   document.addEventListener('click', event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'open-account') openModal();
+    if (action === 'open-orders') openOrders();
+    if (action === 'refresh-orders') loadOrders();
+    if (action === 'pay-order') payOrder(event.target.closest('[data-order-no]')?.dataset.orderNo);
     if (action === 'close-modal') closeModal();
     if (action === 'buy') buy();
     if (action === 'toggle-menu') document.body.classList.toggle('menu-open');
@@ -230,6 +341,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.lucide) lucide.createIcons();
   updateAccount();
   await Promise.all([loadProducts(), loadDrops()]);
+  loadOrders({silent: true});
   updateCountdown();
   setInterval(updateCountdown, 1000);
 });

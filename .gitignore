@@ -30,6 +30,8 @@ application-local.yml
 # Generated test data
 jmeter/tokens.csv
 jmeter/results/
+loadtest/users.csv
+loadtest/results/
 
 # WSL2 user config (documented in infra/, not committed)
 .wslconfig

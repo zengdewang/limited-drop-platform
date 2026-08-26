@@ -56,6 +56,10 @@ public class JwtAuthWebFilter implements WebFilter, Ordered {
     }
 
     private boolean isWhitelisted(HttpMethod method, String path) {
+        // CORS 预检不携带 JWT；必须在鉴权前放行，否则浏览器不会发送真正的购买请求。
+        if (method == HttpMethod.OPTIONS) {
+            return true;
+        }
         // 静态演示页
         if (path.startsWith("/app/")) {
             return true;

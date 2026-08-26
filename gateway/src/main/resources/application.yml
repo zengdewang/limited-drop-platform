@@ -22,7 +22,7 @@ spring:
         - id: order
           uri: http://localhost:8084
           predicates:
-            - Path=/api/order/**
+            - Path=/api/orders/**
         - id: qa
           uri: http://localhost:8085
           predicates:
