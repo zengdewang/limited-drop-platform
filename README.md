@@ -12,7 +12,7 @@
 | 🧠 RAG 问答 | BGE-M3 生成 1024 维向量，Milvus 执行 Dense + BM25 混合检索，候选结果经 BGE Reranker 重排后交给 DeepSeek 作答 |
 | 🔎 来源追溯 | 问答接口返回答案、原文片段、来源类型、来源 ID、检索分数与重排分数，支持核验回答依据 |
 | 📝 知识入库 | 商品官方资料和审核通过的购买评价通过 RocketMQ 自动进入知识库；撤回评价时同步清理对应分块与向量 |
-| 🖥 Web 界面 | 提供商品浏览、注册登录、实时库存、抢购、订单查询、模拟支付和商品知识问答 |
+| 🖥 Web 界面 | 提供商品浏览与运营管理、注册登录、实时库存、抢购、订单查询、模拟支付、购买评价和商品知识问答 |
 | 🧪 并发测试 | JMeter 覆盖库存不超卖、同用户并发幂等、递增并发、IP/账号限流、CSV 参数化和同步起跑 |
 
 ## 🏗 系统架构
@@ -140,6 +140,15 @@ Docker Compose 会启动以下组件：
 
 首次启动时，`infra/mysql/init/` 会自动创建用户、商品、抢购、订单和 QA 数据库。
 
+已有 Docker 数据卷升级到商品图片字段并补充演示目录：
+
+```powershell
+Get-Content -Raw .\infra\mysql\migrations\20260828_product_image_url.sql | docker exec -i drop-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
+Get-Content -Raw .\infra\mysql\init\06_demo_catalog.sql | docker exec -i drop-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
+```
+
+两个 SQL 均可重复执行；全新数据卷会自动执行演示目录初始化，无需手动运行。
+
 ### 3. 配置 RAG API Key
 
 PowerShell：
@@ -191,6 +200,16 @@ python -m http.server 4173 --directory frontend
 
 浏览器打开 **http://localhost:4173**。前端默认通过 **http://localhost:8080** 访问 Gateway。
 
+### 7. 商品、发售、订单与评价
+
+1. 点击页头齿轮按钮打开“商品与发售”，输入本地 `X-Ops-Key`。
+2. 创建商品后，为该商品创建 Drop；等待消息同步完成，再在“发售控制”中点击“开售”。
+3. 注册或登录普通账号，在当前发售中申请购买。订单由 RocketMQ 异步创建，页面会按订单号自动轮询并展示结果。
+4. 对待支付订单点击“模拟支付”。本项目没有物流模块，因此支付成功直接显示为“已支付 · 已收货”。
+5. 支付资格同步到 Product 服务后，订单中会出现“评价”按钮；一笔订单只能评价一次，评价审核状态会显示在订单中。
+
+Ops Key 只保存在当前页面内存，刷新页面后需要重新输入。创建商品时填写的图片地址必须以 `http://` 或 `https://` 开头。
+
 ## 📁 项目结构
 
 ```text
@@ -225,6 +244,10 @@ python -m http.server 4173 --directory frontend
 | GET | `/api/product/products/{id}` | 商品详情 | 公开 |
 | GET | `/api/product/drops` | 限量发售列表 | 公开 |
 | GET | `/api/product/products/{productId}/reviews` | 已发布评价 | 公开 |
+| POST | `/api/product/products` | 创建商品 | `X-Ops-Key` |
+| POST | `/api/product/drops` | 创建发售 | `X-Ops-Key` |
+| GET | `/api/product/reviews/my?orderNos=...` | 批量查询我的评价资格与状态 | JWT |
+| POST | `/api/product/reviews` | 提交购买评价 | JWT |
 
 ### 抢购与订单
 
@@ -232,6 +255,8 @@ python -m http.server 4173 --directory frontend
 |---|---|---|---|
 | GET | `/api/flashsale/drops/{dropId}/info` | 查询开售状态与剩余库存 | 公开 |
 | POST | `/api/flashsale/drops/{dropId}/buy` | 参与抢购 | JWT |
+| POST | `/api/flashsale/drops/{dropId}/open` | 预热库存并开售 | `X-Ops-Key` |
+| POST | `/api/flashsale/drops/{dropId}/close` | 结束发售 | `X-Ops-Key` |
 | GET | `/api/orders/my` | 查询我的订单 | JWT |
 | GET | `/api/orders/{orderNo}` | 查询订单详情 | JWT |
 | POST | `/api/orders/{orderNo}/pay` | 模拟支付 | JWT |
@@ -296,6 +321,7 @@ pwsh -File .\loadtest\prepare-users.ps1 -Count 100
 
 - Redis 是抢购热路径的实时状态来源；Redis 重启后需要重新调用开售接口完成库存预热。
 - 抢购成功只表示库存已经原子预占，订单由 RocketMQ 消费后落库，短时间内查询不到订单属于正常的最终一致过程。
+- 当前版本不包含物流状态；模拟支付成功即视为收货，并开放购买评价入口。
 - 商品资料按 300 字符分块并保留 30 字符重叠；Embedding 模型维度变化后需要重建 Milvus 集合与知识索引。
 - RAG 会优先使用 SiliconFlow Embedding/Reranker 和 DeepSeek；外部模型不可用时，服务会使用有限的降级逻辑，回答质量会下降。
 - 仓库中的数据库密码、JWT Secret 和运维 Key 仅用于本地开发，部署到共享环境前必须改为环境变量或密钥管理服务。

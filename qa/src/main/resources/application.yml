@@ -8,7 +8,7 @@ spring:
     init:
       mode: always
   datasource:
-    url: jdbc:mysql://localhost:3308/drop_qa_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    url: jdbc:mysql://localhost:3308/drop_qa_db?characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
     username: root
     password: root123
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -44,7 +44,7 @@ app:
     chunk-overlap: 30
   # 只读数据源：qa 全量重建时读 product/review 表
   product-db:
-    url: jdbc:mysql://localhost:3308/drop_product_db?characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
+    url: jdbc:mysql://localhost:3308/drop_product_db?characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&connectionCollation=utf8mb4_unicode_ci
     username: root
     password: root123
 

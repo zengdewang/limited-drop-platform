@@ -14,6 +14,7 @@ public class ProductResponse {
     private String brand;
     private String name;
     private String category;
+    private String imageUrl;
     /** 最近一场发售价格（分），无发售则为 null */
     private Long priceCents;
 }

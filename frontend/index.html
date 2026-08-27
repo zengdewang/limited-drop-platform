@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260828">
   <script src="https://unpkg.com/lucide@latest" defer></script>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=20260828-2" defer></script>
 </head>
 <body>
   <div class="announcement"><span>限量发售 01</span><strong>下一场发售：Birkin 25 / 12:00 CST</strong><button class="text-button" data-action="open-account">我的账户 <i data-lucide="arrow-up-right"></i></button></div>
@@ -25,6 +25,7 @@
     </nav>
     <div class="header-actions">
       <button class="icon-button" data-action="toggle-search" aria-label="搜索" title="搜索"><i data-lucide="search"></i></button>
+      <button class="icon-button" data-action="open-management" aria-label="商品管理" title="商品管理"><i data-lucide="settings-2"></i></button>
       <button class="account-button" data-action="open-account"><i data-lucide="user-round"></i><span data-account-label>登录</span></button>
       <button class="menu-button icon-button" data-action="toggle-menu" aria-label="打开菜单"><i data-lucide="menu"></i></button>
     </div>
@@ -37,7 +38,7 @@
         <h1>值得被珍藏的<br><em>作品。</em></h1>
         <p class="hero-intro">精选难以寻觅的珍品，以少量限量的方式，在恰好的时刻与您相遇。</p>
         <div class="hero-links"><a class="primary-button" href="#live-drop">查看当前发售 <i data-lucide="arrow-down-right"></i></a><a class="quiet-link" href="#assistant">咨询知识库 <i data-lucide="arrow-up-right"></i></a></div>
-        <dl class="hero-metrics"><div><dt>04</dt><dd>本次精选藏品</dd></div><div><dt>01</dt><dd>当前限量发售</dd></div><div><dt>100%</dt><dd>已完成真伪鉴定</dd></div></dl>
+        <dl class="hero-metrics"><div><dt data-hero-product-count>00</dt><dd>本次精选藏品</dd></div><div><dt>01</dt><dd>当前限量发售</dd></div><div><dt>100%</dt><dd>已完成真伪鉴定</dd></div></dl>
       </div>
       <div class="hero-visual">
         <div class="visual-index">MP / 001</div>
@@ -52,7 +53,7 @@
       <div class="live-content">
         <div class="live-product"><div class="live-thumb"><img src="https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=500&q=85" alt="黑色皮革手袋"></div><div><p class="product-kicker">精选系列 / 001</p><h2 data-live-name>Birkin 25 · Togo 皮革</h2><p data-live-category>Hermès / 手袋</p></div></div>
         <div class="countdown-block"><span>申请截止倒计时</span><strong data-countdown>00 : 18 : 42</strong><div class="countdown-track"><span data-countdown-progress></span></div></div>
-        <div class="inventory-block"><span>剩余数量</span><strong data-remaining>24</strong><small>共 40 件</small></div>
+        <div class="inventory-block"><span>剩余数量</span><strong data-remaining>24</strong><small data-live-stock>共 40 件</small></div>
         <div class="live-price"><span data-live-price>¥ 86,000</span><button class="primary-button compact" data-action="buy"><i data-lucide="zap"></i>申请购买</button></div>
       </div>
       <p class="demo-note" data-demo-note hidden>演示模式 · 连接平台服务后可查看实时库存。</p>
@@ -64,7 +65,7 @@
     </section>
 
     <section class="catalog-section shell" id="catalog">
-      <div class="section-header"><div><p class="eyebrow">精选</p><h2>四件作品，<br><em>同一套标准。</em></h2></div><div class="section-tools"><span data-product-count>04 件</span><button class="filter-button" data-action="toggle-filter">筛选 <i data-lucide="sliders-horizontal"></i></button></div></div>
+      <div class="section-header"><div><p class="eyebrow">精选</p><h2>每件作品，<br><em>同一套标准。</em></h2></div><div class="section-tools"><span data-product-count>00 件</span><button class="filter-button" data-action="toggle-filter">筛选 <i data-lucide="sliders-horizontal"></i></button></div></div>
       <div class="catalog-grid" data-product-grid></div>
     </section>
 
@@ -81,6 +82,51 @@
   <footer class="site-footer shell"><div class="footer-mark">MP</div><div><p class="eyebrow">Maison de Port</p><p>限量作品，恰逢其时。</p></div><div class="footer-links"><a href="#drops">发售</a><a href="#catalog">精选</a><a href="#assistant">知识库</a></div><span class="mono">© 2026 MP</span></footer>
 
   <div class="modal-backdrop" data-modal hidden><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close icon-button" data-action="close-modal" aria-label="关闭"><i data-lucide="x"></i></button><p class="eyebrow">我的账户</p><h2 id="modal-title">保留您的<br><em>申请资格。</em></h2><div class="auth-tabs"><button class="is-active" data-auth-tab="login">登录</button><button data-auth-tab="register">创建账户</button></div><form data-auth-form><label>用户名<input name="username" required autocomplete="username" placeholder="请输入用户名"></label><label data-password-label>密码<input name="password" type="password" required autocomplete="current-password" placeholder="请输入密码"></label><button class="primary-button full" type="submit" data-auth-submit>登录 <i data-lucide="arrow-up-right"></i></button><p class="form-feedback" data-form-feedback></p></form></section></div>
+
+  <div class="modal-backdrop" data-review-modal hidden>
+    <section class="modal review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title">
+      <button class="modal-close icon-button" data-action="close-review" aria-label="关闭评价"><i data-lucide="x"></i></button>
+      <p class="eyebrow">购买评价</p><h2 id="review-title">写下真实的<br><em>使用感受。</em></h2>
+      <p class="review-product" data-review-product></p>
+      <form data-review-form>
+        <input type="hidden" name="orderNo">
+        <fieldset class="rating-field"><legend>评分</legend><div class="rating-buttons" data-rating-buttons>
+          <button type="button" data-rating="1" aria-label="1 星" title="1 星"><i data-lucide="star"></i></button>
+          <button type="button" data-rating="2" aria-label="2 星" title="2 星"><i data-lucide="star"></i></button>
+          <button type="button" data-rating="3" aria-label="3 星" title="3 星"><i data-lucide="star"></i></button>
+          <button type="button" data-rating="4" aria-label="4 星" title="4 星"><i data-lucide="star"></i></button>
+          <button type="button" data-rating="5" aria-label="5 星" title="5 星"><i data-lucide="star"></i></button>
+        </div></fieldset>
+        <label class="field-label">评价内容<textarea name="content" maxlength="1000" rows="5" required placeholder="请描述商品、包装或使用感受"></textarea></label>
+        <button class="primary-button full" type="submit"><i data-lucide="send"></i>提交评价</button>
+        <p class="form-feedback" data-review-feedback></p>
+      </form>
+    </section>
+  </div>
+
+  <div class="management-layer" data-management hidden>
+    <button class="management-scrim" data-action="close-management" aria-label="关闭商品管理"></button>
+    <aside class="management-drawer" role="dialog" aria-modal="true" aria-labelledby="management-title">
+      <header class="management-header"><div><p class="eyebrow">运营管理</p><h2 id="management-title">商品与发售</h2></div><button class="icon-button" data-action="close-management" aria-label="关闭商品管理"><i data-lucide="x"></i></button></header>
+      <form class="ops-access" data-ops-form><label class="field-label">Ops Key<input name="opsKey" type="password" required autocomplete="off" placeholder="输入本地运营密钥"></label><button class="primary-button" type="submit"><i data-lucide="key-round"></i>进入管理</button><p class="form-feedback" data-ops-feedback></p></form>
+      <div class="management-content" data-management-content hidden>
+        <section class="management-section"><div class="management-section-title"><span>01</span><h3>创建商品</h3></div><form class="management-form" data-product-form>
+          <div class="form-grid"><label class="field-label">品牌<input name="brand" required maxlength="64"></label><label class="field-label">名称<input name="name" required maxlength="128"></label></div>
+          <div class="form-grid"><label class="field-label">分类<select name="category"><option value="Handbag">手袋</option><option value="Shoes">鞋履</option><option value="Accessories">配饰</option><option value="Object">作品</option></select></label><label class="field-label">图片 URL<input name="imageUrl" type="url" required placeholder="https://..."></label></div>
+          <label class="field-label">官方资料<textarea name="officialDoc" rows="5" maxlength="4000" required></textarea></label>
+          <button class="primary-button" type="submit"><i data-lucide="package-plus"></i>创建商品</button><p class="form-feedback" data-product-feedback></p>
+        </form></section>
+        <section class="management-section"><div class="management-section-title"><span>02</span><h3>创建发售</h3></div><form class="management-form" data-drop-form>
+          <label class="field-label">商品<select name="productId" data-product-select required></select></label>
+          <label class="field-label">发售名称<input name="name" required maxlength="128"></label>
+          <div class="form-grid"><label class="field-label">开始时间<input name="startTime" type="datetime-local" required></label><label class="field-label">结束时间<input name="endTime" type="datetime-local" required></label></div>
+          <div class="form-grid"><label class="field-label">库存<input name="stock" type="number" min="1" step="1" required></label><label class="field-label">价格（元）<input name="priceYuan" type="number" min="0.01" step="0.01" required></label></div>
+          <button class="primary-button" type="submit"><i data-lucide="calendar-plus"></i>创建发售</button><p class="form-feedback" data-drop-feedback></p>
+        </form></section>
+        <section class="management-section"><div class="management-section-title"><span>03</span><h3>发售控制</h3></div><div class="drop-admin-list" data-drop-admin-list></div></section>
+      </div>
+    </aside>
+  </div>
   <div class="toast" data-toast role="status" aria-live="polite"></div>
 </body>
 </html>

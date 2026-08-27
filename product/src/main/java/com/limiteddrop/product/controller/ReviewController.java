@@ -3,6 +3,7 @@ package com.limiteddrop.product.controller;
 import com.limiteddrop.common.api.ApiException;
 import com.limiteddrop.common.api.Result;
 import com.limiteddrop.product.dto.ModerateRequest;
+import com.limiteddrop.product.dto.MyReviewStatusResponse;
 import com.limiteddrop.product.dto.ReviewRequest;
 import com.limiteddrop.product.dto.ReviewResponse;
 import com.limiteddrop.product.service.ReviewService;
@@ -33,6 +34,20 @@ public class ReviewController {
     @GetMapping("/products/{productId}/reviews")
     public Result<List<ReviewResponse>> listByProduct(@PathVariable Long productId) {
         return Result.ok(reviewService.listByProduct(productId));
+    }
+
+    /** JWT：批量查询当前用户订单的评价资格与评价状态。 */
+    @GetMapping("/reviews/my")
+    public Result<List<MyReviewStatusResponse>> myStatuses(
+            @RequestHeader(value = "X-User-Id", required = false) Long customerId,
+            @RequestParam List<String> orderNos) {
+        if (customerId == null) {
+            throw ApiException.of(401, "未登录");
+        }
+        if (orderNos.isEmpty() || orderNos.size() > 20) {
+            throw ApiException.of(400, "orderNos 数量必须在 1 到 20 之间");
+        }
+        return Result.ok(reviewService.myStatuses(customerId, orderNos));
     }
 
     /** ops：待人工复核列表 */

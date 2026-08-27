@@ -68,8 +68,12 @@ public class JwtAuthWebFilter implements WebFilter, Ordered {
         if ("/api/user/auth/register".equals(path) || "/api/user/auth/login".equals(path)) {
             return true;
         }
-        // 公开 GET
-        if (method == HttpMethod.GET && path.startsWith("/api/product/")) {
+        // 公开商品、发售与已审核评价；/api/product/reviews/my 必须经过 JWT。
+        if (method == HttpMethod.GET && (path.equals("/api/product/products")
+                || path.matches("/api/product/products/\\d+")
+                || path.matches("/api/product/products/\\d+/reviews")
+                || path.equals("/api/product/drops")
+                || path.matches("/api/product/drops/\\d+"))) {
             return true;
         }
         if (method == HttpMethod.GET && path.matches("/api/flashsale/drops/\\d+/info")) {

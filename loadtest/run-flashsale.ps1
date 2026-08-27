@@ -52,7 +52,11 @@ param(
 
     [switch]$SkipOpen,
 
-    [switch]$CloseAfter
+    [switch]$CloseAfter,
+
+    [switch]$OpenReport,
+
+    [switch]$Gui
 )
 
 Set-StrictMode -Version Latest
@@ -161,13 +165,7 @@ try {
     $summaryPath = Join-Path $runDirectory 'summary.json'
     New-Item -ItemType Directory -Path $runDirectory -Force | Out-Null
 
-    $jmeterArguments = @(
-        '-n'
-        '-t', $jmxPath
-        '-l', $jtlPath
-        '-j', $logPath
-        '-e'
-        '-o', $reportDirectory
+    $propertyArguments = @(
         "-Jscenario=$Scenario"
         "-Jdrop_id=$DropId"
         "-Jstock=$Stock"
@@ -188,6 +186,31 @@ try {
 
     Write-Host "开始场景：$Scenario"
     Write-Host "线程数：$threads；Drop：$DropId；库存：$Stock"
+
+    if ($Gui) {
+        $guiArguments = @('-t', $jmxPath, '-j', $logPath) + $propertyArguments
+        Write-Host 'JMeter GUI 将打开。点击工具栏绿色启动按钮后，在左侧选择响应时间曲线或聚合图。'
+        & $JMeterBin @guiArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "JMeter GUI 退出码为 $LASTEXITCODE，请查看 $logPath"
+        }
+        if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+            Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json |
+                Select-Object scenario, checks, samples, success, soldout, duplicate,
+                    rate_limited, oversell, average_ms, p95_ms | Format-List
+        }
+        return
+    }
+
+    $jmeterArguments = @(
+        '-n'
+        '-t', $jmxPath
+        '-l', $jtlPath
+        '-j', $logPath
+        '-e'
+        '-o', $reportDirectory
+    ) + $propertyArguments
+
     & $JMeterBin @jmeterArguments
     $jmeterExitCode = $LASTEXITCODE
 
@@ -205,6 +228,10 @@ try {
     Write-Host "JTL：$jtlPath"
     Write-Host "HTML 报告：$reportDirectory\index.html"
     Write-Host "汇总：$summaryPath"
+
+    if ($OpenReport) {
+        Start-Process -FilePath (Join-Path $reportDirectory 'index.html')
+    }
 
     if ($summary.checks -ne 'PASS') {
         $failureText = @($summary.failures) -join '; '

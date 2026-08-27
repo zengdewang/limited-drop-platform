@@ -17,6 +17,8 @@
           </elementProp>
         </collectionProp>
       </elementProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
     </TestPlan>
     <hashTree>
       <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="00 - 初始化与参数校验">
@@ -114,7 +116,7 @@ if (!errors.isEmpty()) {
         </elementProp>
       </ThreadGroup>
       <hashTree>
-        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="CSV 用户参数化">
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="CSV 用户参数化" enabled="true">
           <stringProp name="delimiter">,</stringProp>
           <stringProp name="fileEncoding">UTF-8</stringProp>
           <stringProp name="filename">${__P(users_file,loadtest/users.csv.example)}</stringProp>
@@ -126,13 +128,13 @@ if (!errors.isEmpty()) {
           <stringProp name="variableNames">userId,token,username,clientIp</stringProp>
         </CSVDataSet>
         <hashTree/>
-        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="直连场景：inventory / same-user / ramp">
+        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="直连场景：inventory / same-user / ramp" enabled="true">
           <stringProp name="IfController.condition">${__groovy(props.get(&apos;flashsale.configError&apos;) == null ? !vars.get(&apos;scenario&apos;).startsWith(&apos;limit-&apos;) : false)}</stringProp>
           <boolProp name="IfController.evaluateAll">false</boolProp>
           <boolProp name="IfController.useExpression">true</boolProp>
         </IfController>
         <hashTree>
-          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST 抢购（直连 Flashsale）" enabled="true">
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="秒杀购买请求" enabled="true">
             <stringProp name="HTTPSampler.connect_timeout">${__P(connect_timeout_ms,5000)}</stringProp>
             <stringProp name="HTTPSampler.response_timeout">${__P(response_timeout_ms,10000)}</stringProp>
             <stringProp name="HTTPSampler.domain">${__P(direct_host,localhost)}</stringProp>
@@ -143,7 +145,7 @@ if (!errors.isEmpty()) {
             <stringProp name="HTTPSampler.method">POST</stringProp>
             <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
             <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
-            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="用户定义的变量">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
               <collectionProp name="Arguments.arguments"/>
             </elementProp>
           </HTTPSamplerProxy>
@@ -309,13 +311,13 @@ try {
             <hashTree/>
           </hashTree>
         </hashTree>
-        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Gateway 场景：limit-ip / limit-account">
+        <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Gateway 场景：limit-ip / limit-account" enabled="true">
           <stringProp name="IfController.condition">${__groovy(props.get(&apos;flashsale.configError&apos;) == null ? vars.get(&apos;scenario&apos;).startsWith(&apos;limit-&apos;) : false)}</stringProp>
           <boolProp name="IfController.evaluateAll">false</boolProp>
           <boolProp name="IfController.useExpression">true</boolProp>
         </IfController>
         <hashTree>
-          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST 抢购（经过 Gateway）" enabled="true">
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="秒杀购买请求" enabled="true">
             <stringProp name="HTTPSampler.connect_timeout">${__P(connect_timeout_ms,5000)}</stringProp>
             <stringProp name="HTTPSampler.response_timeout">${__P(response_timeout_ms,10000)}</stringProp>
             <stringProp name="HTTPSampler.domain">${__P(gateway_host,localhost)}</stringProp>
@@ -326,7 +328,7 @@ try {
             <stringProp name="HTTPSampler.method">POST</stringProp>
             <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
             <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
-            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="用户定义的变量">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
               <collectionProp name="Arguments.arguments"/>
             </elementProp>
           </HTTPSamplerProxy>
@@ -504,6 +506,86 @@ try {
             <hashTree/>
           </hashTree>
         </hashTree>
+        <ResultCollector guiclass="RespTimeGraphVisualizer" testclass="ResultCollector" testname="响应时间图" enabled="true">
+          <boolProp name="ResultCollector.error_logging">false</boolProp>
+          <objProp>
+            <name>saveConfig</name>
+            <value class="SampleSaveConfiguration">
+              <time>true</time>
+              <latency>true</latency>
+              <timestamp>true</timestamp>
+              <success>true</success>
+              <label>true</label>
+              <code>true</code>
+              <message>false</message>
+              <threadName>true</threadName>
+              <dataType>false</dataType>
+              <encoding>false</encoding>
+              <assertions>false</assertions>
+              <subresults>false</subresults>
+              <responseData>false</responseData>
+              <samplerData>false</samplerData>
+              <xml>false</xml>
+              <fieldNames>true</fieldNames>
+              <responseHeaders>false</responseHeaders>
+              <requestHeaders>false</requestHeaders>
+              <responseDataOnError>false</responseDataOnError>
+              <saveAssertionResultsFailureMessage>false</saveAssertionResultsFailureMessage>
+              <assertionsResultsToSave>0</assertionsResultsToSave>
+              <bytes>true</bytes>
+              <sentBytes>true</sentBytes>
+              <url>true</url>
+              <threadCounts>true</threadCounts>
+              <idleTime>true</idleTime>
+              <connectTime>true</connectTime>
+            </value>
+          </objProp>
+          <stringProp name="RespTimeGraph.interval">1000</stringProp>
+          <boolProp name="RespTimeGraph.seriesselection">true</boolProp>
+          <stringProp name="RespTimeGraph.seriesselectionmatchlabel">秒杀购买请求</stringProp>
+          <boolProp name="RespTimeGraph.seriesselectionregexp">false</boolProp>
+          <stringProp name="RespTimeGraph.graphtitle">秒杀购买响应时间（毫秒）</stringProp>
+          <stringProp name="RespTimeGraph.yaxisscaleincrement">50</stringProp>
+          <stringProp name="filename"></stringProp>
+        </ResultCollector>
+        <hashTree/>
+        <ResultCollector guiclass="StatGraphVisualizer" testclass="ResultCollector" testname="Aggregate Graph" enabled="true">
+          <boolProp name="ResultCollector.error_logging">false</boolProp>
+          <objProp>
+            <name>saveConfig</name>
+            <value class="SampleSaveConfiguration">
+              <time>true</time>
+              <latency>true</latency>
+              <timestamp>true</timestamp>
+              <success>true</success>
+              <label>true</label>
+              <code>true</code>
+              <message>false</message>
+              <threadName>true</threadName>
+              <dataType>false</dataType>
+              <encoding>false</encoding>
+              <assertions>false</assertions>
+              <subresults>false</subresults>
+              <responseData>false</responseData>
+              <samplerData>false</samplerData>
+              <xml>false</xml>
+              <fieldNames>true</fieldNames>
+              <responseHeaders>false</responseHeaders>
+              <requestHeaders>false</requestHeaders>
+              <responseDataOnError>false</responseDataOnError>
+              <saveAssertionResultsFailureMessage>false</saveAssertionResultsFailureMessage>
+              <assertionsResultsToSave>0</assertionsResultsToSave>
+              <bytes>true</bytes>
+              <sentBytes>true</sentBytes>
+              <url>true</url>
+              <threadCounts>true</threadCounts>
+              <idleTime>true</idleTime>
+              <connectTime>true</connectTime>
+            </value>
+          </objProp>
+          <stringProp name="filename"></stringProp>
+        </ResultCollector>
+        <hashTree/>
       </hashTree>
       <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="90 - 汇总与最终判定" enabled="true">
         <intProp name="ThreadGroup.num_threads">1</intProp>
@@ -688,7 +770,7 @@ if (summaryPath) {
         <stringProp name="filename"></stringProp>
       </ResultCollector>
       <hashTree/>
-      <ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="查看结果树（调试时手动启用）" enabled="false">
+      <ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="查看结果树（调试时手动启用）">
         <boolProp name="ResultCollector.error_logging">false</boolProp>
         <objProp>
           <name>saveConfig</name>

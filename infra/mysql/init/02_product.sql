@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS product (
   brand        VARCHAR(64)  NOT NULL,
   name         VARCHAR(128) NOT NULL,
   category     VARCHAR(64),
+  image_url    VARCHAR(1000) NULL,
   official_doc TEXT         NOT NULL,          -- RAG source #1
   created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)

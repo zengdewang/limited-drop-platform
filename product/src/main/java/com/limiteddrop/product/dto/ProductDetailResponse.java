@@ -14,6 +14,7 @@ public class ProductDetailResponse {
     private String brand;
     private String name;
     private String category;
+    private String imageUrl;
     private String officialDoc;
     private Long priceCents;
 }

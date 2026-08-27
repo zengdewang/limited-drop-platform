@@ -2,6 +2,7 @@ package com.limiteddrop.product.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.limiteddrop.common.api.ApiException;
+import com.limiteddrop.product.dto.MyReviewStatusResponse;
 import com.limiteddrop.product.dto.ReviewRequest;
 import com.limiteddrop.product.dto.ReviewResponse;
 import com.limiteddrop.product.entity.PaidOrder;
@@ -11,11 +12,16 @@ import com.limiteddrop.product.mapper.ReviewMapper;
 import com.limiteddrop.product.mq.ProductEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 评价 + Moderation 状态机（PENDING/APPROVED/REJECTED）。
@@ -63,7 +69,11 @@ public class ReviewService {
         if (!PENDING.equals(r.getStatus())) {
             r.setModeratedAt(LocalDateTime.now());
         }
-        reviewMapper.insert(r);
+        try {
+            reviewMapper.insert(r);
+        } catch (DuplicateKeyException e) {
+            throw ApiException.of(400, "该订单已评价过");
+        }
         if (APPROVED.equals(r.getStatus())) {
             publisher.reviewModerated(r);
         }
@@ -76,6 +86,43 @@ public class ReviewService {
                         .eq(Review::getStatus, APPROVED)
                         .orderByDesc(Review::getCreatedAt))
                 .stream().map(this::toResponse).toList();
+    }
+
+    public List<MyReviewStatusResponse> myStatuses(Long customerId, List<String> requestedOrderNos) {
+        List<String> orderNos = new LinkedHashSet<>(requestedOrderNos).stream()
+                .filter(orderNo -> orderNo != null && !orderNo.isBlank())
+                .map(String::trim)
+                .toList();
+        if (orderNos.isEmpty()) {
+            throw ApiException.of(400, "orderNos 不能为空");
+        }
+
+        Map<String, PaidOrder> paidByOrder = paidOrderMapper.selectList(
+                        Wrappers.<PaidOrder>lambdaQuery()
+                                .eq(PaidOrder::getCustomerId, customerId)
+                                .in(PaidOrder::getOrderNo, orderNos))
+                .stream().collect(Collectors.toMap(PaidOrder::getOrderNo, Function.identity()));
+        Map<String, Review> reviewByOrder = reviewMapper.selectList(
+                        Wrappers.<Review>lambdaQuery()
+                                .eq(Review::getCustomerId, customerId)
+                                .in(Review::getOrderNo, orderNos))
+                .stream().collect(Collectors.toMap(Review::getOrderNo, Function.identity()));
+
+        return orderNos.stream().map(orderNo -> {
+            PaidOrder paidOrder = paidByOrder.get(orderNo);
+            Review review = reviewByOrder.get(orderNo);
+            Long productId = review != null ? review.getProductId()
+                    : paidOrder == null ? null : paidOrder.getProductId();
+            return MyReviewStatusResponse.builder()
+                    .orderNo(orderNo)
+                    .productId(productId)
+                    .eligible(paidOrder != null)
+                    .reviewed(review != null)
+                    .reviewStatus(review == null ? null : review.getStatus())
+                    .rating(review == null ? null : review.getRating())
+                    .content(review == null ? null : review.getContent())
+                    .build();
+        }).toList();
     }
 
     public List<ReviewResponse> listPending() {

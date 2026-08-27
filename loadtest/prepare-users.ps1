@@ -35,7 +35,7 @@ $baseUri = $GatewayBaseUrl.TrimEnd('/')
 $records = [System.Collections.Generic.List[object]]::new()
 
 for ($index = 1; $index -le $Count; $index++) {
-    $username = '$Prefix_{0:D4}' -f $index
+    $username = "${Prefix}_{0:D4}" -f $index
     $payload = @{ username = $username; password = $Password } | ConvertTo-Json -Compress
     $request = @{
         Method      = 'Post'

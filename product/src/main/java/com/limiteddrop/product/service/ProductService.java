@@ -31,6 +31,7 @@ public class ProductService {
         p.setBrand(req.getBrand());
         p.setName(req.getName());
         p.setCategory(req.getCategory());
+        p.setImageUrl(req.getImageUrl());
         p.setOfficialDoc(req.getOfficialDoc());
         productMapper.insert(p);
         publisher.productDocPublished(p);
@@ -51,7 +52,8 @@ public class ProductService {
         }
         return ProductDetailResponse.builder()
                 .id(p.getId()).brand(p.getBrand()).name(p.getName())
-                .category(p.getCategory()).officialDoc(p.getOfficialDoc())
+                .category(p.getCategory()).imageUrl(p.getImageUrl())
+                .officialDoc(p.getOfficialDoc())
                 .priceCents(latestPrice(id))
                 .build();
     }
@@ -59,7 +61,8 @@ public class ProductService {
     private ProductResponse toResponse(Product p) {
         return ProductResponse.builder()
                 .id(p.getId()).brand(p.getBrand()).name(p.getName())
-                .category(p.getCategory()).priceCents(latestPrice(p.getId()))
+                .category(p.getCategory()).imageUrl(p.getImageUrl())
+                .priceCents(latestPrice(p.getId()))
                 .build();
     }
 
